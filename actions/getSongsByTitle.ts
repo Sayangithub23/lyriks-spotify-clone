@@ -1,19 +1,15 @@
 import { Song } from "@/types";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
 import getSongs from "./getSongs";
 import { mapDeezerTrackToSong } from "@/libs/helpers";
 
-// Internal function to search Supabase (your original logic)
+// Internal function to search Supabase
 const searchSupabaseSongs = async (title: string): Promise<Song[]> => {
-    const supabase = createServerComponentClient({
-        cookies: cookies,
-    });
+    const supabase = createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    );
     
-    // We don't need session here unless you *only* want to search
-    // the user's *own* uploaded songs. If so, add this back.
-    // .eq('user_id', sessionData.session?.user.id)
-
     const { data, error } = await supabase
     .from('songs')
     .select('*')
@@ -41,7 +37,8 @@ const searchDeezerSongs = async (title: string): Promise<Song[]> => {
         const data = await res.json();
         if (!data || !data.data) return [];
 
-        const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song) => ({
+       
+        const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Omit<Song, 'user_id'>) => ({
             ...song,
             id: `deezer-${song.id}`, // Add prefix to avoid ID conflicts
             source: 'deezer'
@@ -54,21 +51,19 @@ const searchDeezerSongs = async (title: string): Promise<Song[]> => {
     }
 };
 
-
 // The main exported function
 const getSongsByTitle = async (title?: string): Promise<Song[]> => {
   if (!title) {
-    return getSongs(); // Return main page songs if no title
+    return getSongs();
   }
 
-  // Run both searches in parallel
   const [supabaseSongs, deezerSongs] = await Promise.all([
     searchSupabaseSongs(title),
     searchDeezerSongs(title)
   ]);
 
-  // Combine the results
   return [...supabaseSongs, ...deezerSongs];
 };
 
 export default getSongsByTitle;
+
