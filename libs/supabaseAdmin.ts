@@ -106,7 +106,6 @@ const copyBillingDetailsToCustomer = async (
 
   if (!name && !phone && !address && !paymentMethodDetails) return;
 
-  
   const addressParam: Stripe.AddressParam | undefined = address
     ? {
         city: address.city ?? undefined,
@@ -124,16 +123,18 @@ const copyBillingDetailsToCustomer = async (
     address: addressParam, // Use the new, correctly typed object
   });
 
- 
   const billingAddressForSupabase = address ? { ...address } : undefined;
+
+  const safePaymentMethod =
+    paymentMethodDetails && typeof paymentMethodDetails === "object"
+      ? JSON.parse(JSON.stringify(paymentMethodDetails)) // ensure serializable
+      : undefined;
 
   const { error } = await supabaseAdmin
     .from("users")
     .update({
       billing_address: billingAddressForSupabase,
-      payment_method: paymentMethodDetails
-        ? { ...paymentMethodDetails }
-        : undefined,
+      payment_method: safePaymentMethod,
     })
     .eq("id", uuid);
 
