@@ -19,9 +19,7 @@ const useGetSongById = (id?: string) => {
             const isDeezer = String(id).startsWith('deezer-');
 
             if (isDeezer) {
-                // --- ✅ NEW LOGIC: FETCH FROM OUR OWN API PROXY ---
                 try {
-                    // This now calls your new API route at /api/get-song/[id]
                     const res = await fetch(`/api/get-song/${id}`);
                     
                     if (!res.ok) {
