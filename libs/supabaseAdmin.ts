@@ -1,5 +1,3 @@
-// supabaseAdmin.ts
-
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
@@ -28,7 +26,7 @@ const upsertProductRecord = async (product: Stripe.Product) => {
     throw error;
   }
   console.log(`Product inserted/updated: 
-     ${product.id} - ${product.name}`);
+ ${product.id} - ${product.name}`);
 };
 
 const upsertPriceRecord = async (price: Stripe.Price) => {
@@ -89,6 +87,7 @@ const createOrRetrieveCustomer = async ({
   return data.stripe_customer_id;
 };
 
+// --- THIS FUNCTION IS NOW CORRECTED ---
 const copyBillingDetailsToCustomer = async (
   uuid: string,
   payment_method: Stripe.PaymentMethod | null
@@ -101,21 +100,46 @@ const copyBillingDetailsToCustomer = async (
   const customer = payment_method.customer as string;
   const { name, phone, address } = payment_method.billing_details ?? {};
 
-  if (!name && !phone && !address) return;
+  // Find the specific payment method details (e.g., card, sepa_debit)
+  const paymentMethodDetails =
+    payment_method[payment_method.type as keyof Stripe.PaymentMethod];
 
-  await stripe.customers.update(customer, { name, phone, address });
+  if (!name && !phone && !address && !paymentMethodDetails) return;
+
+  
+  const addressParam: Stripe.AddressParam | undefined = address
+    ? {
+        city: address.city ?? undefined,
+        country: address.country ?? undefined,
+        line1: address.line1 ?? undefined,
+        line2: address.line2 ?? undefined,
+        postal_code: address.postal_code ?? undefined,
+        state: address.state ?? undefined,
+      }
+    : undefined;
+
+  await stripe.customers.update(customer, {
+    name: name ?? undefined,
+    phone: phone ?? undefined,
+    address: addressParam, // Use the new, correctly typed object
+  });
+
+ 
+  const billingAddressForSupabase = address ? { ...address } : undefined;
 
   const { error } = await supabaseAdmin
     .from("users")
     .update({
-      billing_address: { ...address },
-      payment_method: { ...payment_method[payment_method.type] },
+      billing_address: billingAddressForSupabase,
+      payment_method: paymentMethodDetails
+        ? { ...paymentMethodDetails }
+        : undefined,
     })
     .eq("id", uuid);
 
   if (error) throw error;
 };
-
+// --- END OF CORRECTED FUNCTION ---
 
 const manageSubscriptionStatusChange = async (
   subscriptionId: string,
@@ -129,15 +153,12 @@ const manageSubscriptionStatusChange = async (
     .single();
 
   if (noCustomerError) throw noCustomerError;
-  
 
   const { id: uuid } = customerData!;
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
     expand: ["default_payment_method"],
   });
-
-  
 
   const subscriptionData = {
     id: subscription.id,
