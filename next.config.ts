@@ -1,7 +1,17 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  images: {
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'efrazwhhlzxmcqygzosr.supabase.co', // Your Supabase domain
+      },
+      {
+        protocol: 'https',
+        hostname: 'cdn-images.dzcdn.net', // The Deezer image domain
+      }
+    ]
+  }
 };
 
-export default nextConfig;
+module.exports = nextConfig;
