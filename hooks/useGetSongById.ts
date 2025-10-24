@@ -1,11 +1,10 @@
 import { Song } from "@/types";
-import { createClient } from "@supabase/supabase-js"; // ✅ ADD THIS
+import { createClient } from "@supabase/supabase-js";
 import getSongs from "@/actions/getSongs";
 import { mapDeezerTrackToSong } from "@/libs/helpers";
 
-// Internal function to search Supabase (your original logic)
+// Internal function to search Supabase
 const searchSupabaseSongs = async (title: string): Promise<Song[]> => {
-    
     const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -41,7 +40,7 @@ const searchDeezerSongs = async (title: string): Promise<Song[]> => {
         
         const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Omit<Song, 'user_id'>) => ({
             ...song,
-            id: `deezer-${song.id}`, // Add prefix to avoid ID conflicts
+            id: `deezer-${song.id}`, 
             source: 'deezer'
         }));
         return deezerSongs;
@@ -53,19 +52,16 @@ const searchDeezerSongs = async (title: string): Promise<Song[]> => {
 };
 
 
-// The main exported function
 const getSongsByTitle = async (title?: string): Promise<Song[]> => {
   if (!title) {
-    return getSongs(); // Return main page songs if no title
+    return getSongs();
   }
 
-  // Run both searches in parallel
   const [supabaseSongs, deezerSongs] = await Promise.all([
     searchSupabaseSongs(title),
     searchDeezerSongs(title)
   ]);
 
-  // Combine the results
   return [...supabaseSongs, ...deezerSongs];
 };
 
