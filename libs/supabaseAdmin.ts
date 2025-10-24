@@ -93,7 +93,10 @@ const copyBillingDetailsToCustomer = async (
   uuid: string,
   payment_method: Stripe.PaymentMethod | null
 ) => {
-  // if (!payment_method) return;
+  if (!payment_method) {
+    console.warn("No payment method provided; skipping billing update.");
+    return;
+  }
 
   const customer = payment_method.customer as string;
   const { name, phone, address } = payment_method.billing_details ?? {};
@@ -113,6 +116,7 @@ const copyBillingDetailsToCustomer = async (
   if (error) throw error;
 };
 
+
 const manageSubscriptionStatusChange = async (
   subscriptionId: string,
   customerId: string,
@@ -125,7 +129,7 @@ const manageSubscriptionStatusChange = async (
     .single();
 
   if (noCustomerError) throw noCustomerError;
-  // if (!customerData) throw new Error('Customer not found.');
+  
 
   const { id: uuid } = customerData!;
 
@@ -133,10 +137,7 @@ const manageSubscriptionStatusChange = async (
     expand: ["default_payment_method"],
   });
 
-  // const priceId =
-  //   typeof subscription.items.data[0].price === 'string'
-  //     ? subscription.items.data[0].price
-  //     : subscription.items.data[0].price.id;
+  
 
   const subscriptionData = {
     id: subscription.id,
