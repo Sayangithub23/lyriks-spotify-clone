@@ -30,14 +30,14 @@ const getSupabaseSongs = async (): Promise<Song[]> => {
 // Internal function for Deezer chart
 const getDeezerChartSongs = async (): Promise<Song[]> => {
   try {
-    const res = await fetch('https://api.deezer.com/chart/0/tracks?limit=30');
+    const res = await fetch('https://api.deezer.com/chart/0/tracks?limit=10');
     if (!res.ok) throw new Error('Failed to fetch from Deezer');
     
     const data = await res.json();
     if (!data || !data.data) return [];
 
-    // Map and add the 'source' property
-    const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Song) => ({
+    // ✅ FIX: Added type 'Omit<Song, 'user_id'>' to the 'song' parameter
+    const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Omit<Song, 'user_id'>) => ({
         ...song,
         id: `deezer-${song.id}`, // Add a prefix to avoid ID conflicts
         source: 'deezer'

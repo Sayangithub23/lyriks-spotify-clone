@@ -1,66 +1,71 @@
-import { useEffect, useMemo, useState } from "react";
 import { Song } from "@/types";
-import { useSessionContext } from "@supabase/auth-helpers-react";
-import toast from "react-hot-toast";
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
+import { cookies } from "next/headers";
+import getSongs from "@/actions/getSongs";
+import { mapDeezerTrackToSong } from "@/libs/helpers";
 
-const useGetSongById = (id?: string) => {
-    const [isLoading, setIsLoading] = useState<boolean>(false);
-    const [song, setSong] = useState<Song | undefined>(undefined);
-    const { supabaseClient } = useSessionContext();
+// Internal function to search Supabase (your original logic)
+const searchSupabaseSongs = async (title: string): Promise<Song[]> => {
+    const supabase = createServerComponentClient({
+        cookies: cookies,
+    });
+    
+    const { data, error } = await supabase
+    .from('songs')
+    .select('*')
+    .ilike('title', `%${title}%`)
+    .order('created_at', { ascending: false });
 
-    useEffect(() => {
-        if (!id) {
-            return;
-        }
+    if (error) {
+        console.log(error.message);
+    }
 
-        setIsLoading(true);
+    const supabaseSongs = (data || []).map((song) => ({
+      ...song,
+      source: 'supabase'
+    }));
 
-        const fetchSong = async () => {
-            const isDeezer = String(id).startsWith('deezer-');
+    return supabaseSongs as Song[];
+};
 
-            if (isDeezer) {
-                try {
-                    const res = await fetch(`/api/get-song/${id}`);
-                    
-                    if (!res.ok) {
-                         const errorText = await res.text();
-                         throw new Error(`Error from proxy: ${errorText}`);
-                    }
+// Internal function to search Deezer
+const searchDeezerSongs = async (title: string): Promise<Song[]> => {
+     try {
+        const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(title)}`);
+        if (!res.ok) throw new Error('Failed to search Deezer');
 
-                    const songData: Song = await res.json();
-                    setSong(songData);
+        const data = await res.json();
+        if (!data || !data.data) return [];
 
-                } catch (error: any) {
-                    toast.error(error.message);
-                } finally {
-                    setIsLoading(false);
-                }
+        // ✅ FIX: Added type 'Omit<Song, 'user_id'>' to the 'song' parameter
+        const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Omit<Song, 'user_id'>) => ({
+            ...song,
+            id: `deezer-${song.id}`, // Add prefix to avoid ID conflicts
+            source: 'deezer'
+        }));
+        return deezerSongs;
 
-            } else {
-                // --- FETCH FROM SUPABASE (Original logic is fine) ---
-                const { data, error } = await supabaseClient
-                    .from('songs')
-                    .select('*')
-                    .eq('id', id)
-                    .single();
+    } catch (error) {
+        console.log(error);
+        return [];
+    }
+};
 
-                if (error) {
-                    toast.error(error.message);
-                } else {
-                    setSong({ ...data, source: 'supabase' } as Song);
-                }
-                setIsLoading(false);
-            }
-        }
 
-        fetchSong();
+// The main exported function
+const getSongsByTitle = async (title?: string): Promise<Song[]> => {
+  if (!title) {
+    return getSongs(); // Return main page songs if no title
+  }
 
-    }, [id, supabaseClient]);
+  // Run both searches in parallel
+  const [supabaseSongs, deezerSongs] = await Promise.all([
+    searchSupabaseSongs(title),
+    searchDeezerSongs(title)
+  ]);
 
-    return useMemo(() => ({
-        isLoading,
-        song
-    }), [isLoading, song]);
-}
+  // Combine the results
+  return [...supabaseSongs, ...deezerSongs];
+};
 
-export default useGetSongById;
+export default getSongsByTitle;
