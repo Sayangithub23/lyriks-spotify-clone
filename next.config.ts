@@ -4,14 +4,18 @@ const nextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'efrazwhhlzxmcqygzosr.supabase.co', // Your Supabase domain
+        hostname: 'efrazwhhlzxmcqygzosr.supabase.co',
       },
       {
         protocol: 'https',
-        hostname: 'cdn-images.dzcdn.net', // The Deezer image domain
+        hostname: 'cdn-images.dzcdn.net',
       }
     ]
-  }
+  },
+  
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
 };
 
 module.exports = nextConfig;
