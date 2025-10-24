@@ -1,13 +1,13 @@
 import { Song } from "@/types";
-import { createServerComponentClient } from "@supabase/auth-helpers-nextjs";
-import { cookies } from "next/headers";
-import { mapDeezerTrackToSong } from "@/libs/helpers"; // Make sure this helper exists
+import { createClient } from "@supabase/supabase-js"; 
+import { mapDeezerTrackToSong } from "@/libs/helpers"; 
 
-// Internal function for Supabase songs (your original logic)
+
 const getSupabaseSongs = async (): Promise<Song[]> => {
-  const supabase = createServerComponentClient({
-    cookies: cookies,
-  });
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 
   const { data, error } = await supabase
     .from('songs')
@@ -18,16 +18,16 @@ const getSupabaseSongs = async (): Promise<Song[]> => {
     console.log(error);
   }
 
-  // We add a 'source' property to distinguish them
+
   const supabaseSongs = (data || []).map((song) => ({
     ...song,
     source: 'supabase'
   }));
   
-  return supabaseSongs as Song[]; // Make sure your Song type can handle 'source'
+  return supabaseSongs as Song[]; 
 };
 
-// Internal function for Deezer chart
+
 const getDeezerChartSongs = async (): Promise<Song[]> => {
   try {
     const res = await fetch('https://api.deezer.com/chart/0/tracks?limit=10');
@@ -36,10 +36,10 @@ const getDeezerChartSongs = async (): Promise<Song[]> => {
     const data = await res.json();
     if (!data || !data.data) return [];
 
-    // ✅ FIX: Added type 'Omit<Song, 'user_id'>' to the 'song' parameter
+  
     const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Omit<Song, 'user_id'>) => ({
         ...song,
-        id: `deezer-${song.id}`, // Add a prefix to avoid ID conflicts
+        id: `deezer-${song.id}`, 
         source: 'deezer'
     }));
     return deezerSongs;
@@ -50,7 +50,6 @@ const getDeezerChartSongs = async (): Promise<Song[]> => {
   }
 };
 
-// The main exported function
 const getSongs = async (): Promise<Song[]> => {
   // Run both fetches in parallel
   const [supabaseSongs, deezerSongs] = await Promise.all([
@@ -58,8 +57,9 @@ const getSongs = async (): Promise<Song[]> => {
     getDeezerChartSongs()
   ]);
 
-  // Combine the results
+  
   return [...supabaseSongs, ...deezerSongs];
 };
 
 export default getSongs;
+
