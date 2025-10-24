@@ -1,69 +1,84 @@
+import { useEffect, useMemo, useState } from "react";
 import { Song } from "@/types";
-import { createClient } from "@supabase/supabase-js";
-import getSongs from "@/actions/getSongs";
-import { mapDeezerTrackToSong } from "@/libs/helpers";
+import { useSessionContext } from "@supabase/auth-helpers-react";
+import toast from "react-hot-toast";
 
-// Internal function to search Supabase
-const searchSupabaseSongs = async (title: string): Promise<Song[]> => {
-    const supabase = createClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-    
-    const { data, error } = await supabase
-    .from('songs')
-    .select('*')
-    .ilike('title', `%${title}%`)
-    .order('created_at', { ascending: false });
+const useGetSongById = (id?: string) => {
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [song, setSong] = useState<Song | undefined>(undefined);
+  const { supabaseClient } = useSessionContext();
 
-    if (error) {
-        console.log(error.message);
+  useEffect(() => {
+    if (!id) {
+      return;
     }
 
-    const supabaseSongs = (data || []).map((song) => ({
-      ...song,
-      source: 'supabase'
-    }));
+    setIsLoading(true);
 
-    return supabaseSongs as Song[];
+    const fetchSong = async () => {
+      // 'id' is a string ("7" or "deezer-123")
+      const isDeezer = String(id).startsWith("deezer-");
+
+      if (isDeezer) {
+        // --- FETCH FROM OUR API PROXY ---
+        try {
+          const res = await fetch(`/api/get-song/${id}`);
+
+          if (!res.ok) {
+            const errorText = await res.text();
+            throw new Error(`Error from proxy: ${errorText}`);
+          }
+
+          const songData: Song = await res.json();
+          setSong(songData);
+        } catch (error: unknown) {
+          if (error instanceof Error) {
+            toast.error(error.message);
+          } else {
+            toast.error("An unknown error occurred");
+          }
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        // --- FETCH FROM SUPABASE ---
+
+        // ✅ THE FIX: Convert the string ID ("7") back to a number
+        const numericId = parseInt(id, 10);
+
+        // Check if the conversion is valid
+        if (isNaN(numericId)) {
+          setIsLoading(false);
+          return toast.error("Invalid song ID");
+        }
+
+        const { data, error } = await supabaseClient
+          .from("songs")
+          .select("*")
+          .eq("id", numericId) // <-- Use the correct numeric ID
+          .single();
+
+        if (error) {
+          setIsLoading(false); // <-- Add error handling back
+          return toast.error(error.message);
+        } else {
+          // Re-convert to string so all IDs are strings in the app
+          setSong({ ...data, id: String(data.id), source: "supabase" } as Song);
+        }
+        setIsLoading(false);
+      }
+    };
+
+    fetchSong();
+  }, [id, supabaseClient]);
+
+  return useMemo(
+    () => ({
+      isLoading,
+      song,
+    }),
+    [isLoading, song]
+  );
 };
 
-// Internal function to search Deezer
-const searchDeezerSongs = async (title: string): Promise<Song[]> => {
-     try {
-        const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(title)}`);
-        if (!res.ok) throw new Error('Failed to search Deezer');
-
-        const data = await res.json();
-        if (!data || !data.data) return [];
-
-        
-        const deezerSongs: Song[] = data.data.map(mapDeezerTrackToSong).map((song: Omit<Song, 'user_id'>) => ({
-            ...song,
-            id: `deezer-${song.id}`, 
-            source: 'deezer'
-        }));
-        return deezerSongs;
-
-    } catch (error) {
-        console.log(error);
-        return [];
-    }
-};
-
-
-const getSongsByTitle = async (title?: string): Promise<Song[]> => {
-  if (!title) {
-    return getSongs();
-  }
-
-  const [supabaseSongs, deezerSongs] = await Promise.all([
-    searchSupabaseSongs(title),
-    searchDeezerSongs(title)
-  ]);
-
-  return [...supabaseSongs, ...deezerSongs];
-};
-
-export default getSongsByTitle;
-
+export default useGetSongById;
