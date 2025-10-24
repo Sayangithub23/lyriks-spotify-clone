@@ -1,25 +1,18 @@
-// app/api/get-song/[id]/route.ts
+import { NextResponse, NextRequest } from 'next/server';
 
-import { NextResponse } from 'next/server';
-
-// This function handles GET requests
 export async function GET(
-  request: Request,
-  { params }: { params: { id: string } }
+  request: NextRequest, // <-- 1. Use NextRequest
+  context: { params: Promise<{ id: string }> } // 2. Use context
 ) {
-  const { id } = params;
+  const { id } = await context.params; // 3. Await context.params
 
   if (!id) {
     return new NextResponse('Song ID is required', { status: 400 });
   }
 
-  // Check if it's a Deezer ID
-  const isDeezer = String(id).startsWith('deezer-');
-  
+  const isDeezer = id.startsWith('deezer-');
+
   if (!isDeezer) {
-    // We are only proxying Deezer, not Supabase.
-    // Supabase fetches should still be handled client-side with RLS.
-    // Returning an error here as this endpoint is only for Deezer.
     return new NextResponse('Invalid song source', { status: 400 });
   }
 
@@ -33,9 +26,7 @@ export async function GET(
     }
 
     const data = await res.json();
-    
-    // Manually map the Deezer data to your Song type
-    // This ensures your client gets the exact 'Song' object it expects
+
     const deezerSong = {
         id: `deezer-${data.id}`,
         title: data.title,
@@ -48,7 +39,11 @@ export async function GET(
 
     return NextResponse.json(deezerSong);
 
-  } catch (error: any) {
-    return new NextResponse(`Internal Server Error: ${error.message}`, { status: 500 });
+  } catch (error) { // <-- 4. Fix for the 'any' error
+    let errorMessage = 'Internal Server Error';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    return new NextResponse(errorMessage, { status: 500 });
   }
 }
