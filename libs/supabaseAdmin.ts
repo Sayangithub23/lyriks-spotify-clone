@@ -33,7 +33,8 @@ const upsertProductRecord = async (product: Stripe.Product) => {
 // Upsert price record in Supabase
 const upsertPriceRecord = async (price: Stripe.Price) => {
   // Fix: Handle cases where price.product could be a string, Product object, or null
-  const productId = typeof price.product === "string" ? price.product : price.product?.id ?? "";
+  const productId =
+    typeof price.product === "string" ? price.product : price.product?.id ?? "";
 
   const priceData: Price = {
     id: price.id,
@@ -53,7 +54,9 @@ const upsertPriceRecord = async (price: Stripe.Price) => {
   if (error) {
     throw new Error(`Failed to upsert price ${price.id}: ${error.message}`);
   }
-  console.log(`Price inserted/updated: ${price.id} - ${productId} - ${price.unit_amount}`);
+  console.log(
+    `Price inserted/updated: ${price.id} - ${productId} - ${price.unit_amount}`
+  );
 };
 
 // Create or retrieve a Stripe customer
@@ -77,9 +80,10 @@ const createOrRetrieveCustomer = async ({
 
   if (error || !data?.stripe_customer_id) {
     console.log(`No customer found for UUID ${uuid}, creating new one...`);
-    const customerData: { metadata: { supabaseUUID: string }; email?: string } = {
-      metadata: { supabaseUUID: uuid },
-    };
+    const customerData: { metadata: { supabaseUUID: string }; email?: string } =
+      {
+        metadata: { supabaseUUID: uuid },
+      };
     if (email) customerData.email = email;
 
     const customer = await stripe.customers.create(customerData);
@@ -88,10 +92,14 @@ const createOrRetrieveCustomer = async ({
       .insert([{ id: uuid, stripe_customer_id: customer.id }]);
 
     if (supabaseError) {
-      throw new Error(`Failed to insert customer for UUID ${uuid}: ${supabaseError.message}`);
+      throw new Error(
+        `Failed to insert customer for UUID ${uuid}: ${supabaseError.message}`
+      );
     }
 
-    console.log(`New customer created and inserted for ${uuid} - ${customer.id}`);
+    console.log(
+      `New customer created and inserted for ${uuid} - ${customer.id}`
+    );
     return customer.id;
   }
 
@@ -113,7 +121,10 @@ const copyBillingDetailsToCustomer = async (
   }
 
   // Fix: Safely handle customer as string or null
-  const customerId = typeof payment_method.customer === "string" ? payment_method.customer : null;
+  const customerId =
+    typeof payment_method.customer === "string"
+      ? payment_method.customer
+      : null;
   if (!customerId) {
     throw new Error("Payment method does not have a valid customer ID");
   }
@@ -165,7 +176,9 @@ const copyBillingDetailsToCustomer = async (
     .eq("id", uuid);
 
   if (error) {
-    throw new Error(`Failed to update billing details for UUID ${uuid}: ${error.message}`);
+    throw new Error(
+      `Failed to update billing details for UUID ${uuid}: ${error.message}`
+    );
   }
 };
 
@@ -186,73 +199,62 @@ const manageSubscriptionStatusChange = async (
     .single();
 
   if (noCustomerError || !customerData) {
-    throw new Error(`Customer not found for ID ${customerId}: ${noCustomerError?.message}`);
+    throw new Error(
+      `Customer not found for ID ${customerId}: ${noCustomerError?.message}`
+    );
   }
 
   const { id: uuid } = customerData;
 
-  // ✅ Stripe v17+ fix — extract `.data`
-  const response = await stripe.subscriptions.retrieve(subscriptionId, {
+  const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
     expand: ["default_payment_method"],
   });
-  const subscription = response.data;
 
-  const priceId = subscription.items.data[0]?.price.id ?? null;
+  const priceId = subscription.items?.data?.[0]?.price?.id ?? null;
 
-  const subscriptionData = {
+  // Helper to safely convert timestamp to ISO string
+  const toISOOrNull = (timestamp: number | null | undefined): string | null => {
+    if (!timestamp) return null;
+    const date = toDateTime(timestamp);
+    return date ? date.toISOString() : null;
+  };
+
+  // Helper for required timestamps (returns string or throws)
+  const toISORequired = (timestamp: number): string => {
+    const date = toDateTime(timestamp);
+    if (!date) throw new Error("Failed to convert required timestamp");
+    return date.toISOString();
+  };
+
+  const subscriptionData: Database['public']['Tables']['subscriptions']['Insert'] = {
     id: subscription.id,
     user_id: uuid,
     status: subscription.status,
     price_id: priceId,
     cancel_at_period_end: subscription.cancel_at_period_end,
-    cancel_at: subscription.cancel_at
-      ? toDateTime(subscription.cancel_at)?.toISOString() ?? null
-      : null,
-    canceled_at: subscription.canceled_at
-      ? toDateTime(subscription.canceled_at)?.toISOString() ?? null
-      : null,
-    current_period_start: subscription.current_period_start
-      ? toDateTime(subscription.current_period_start)?.toISOString() ?? null
-      : null,
-    current_period_end: subscription.current_period_end
-      ? toDateTime(subscription.current_period_end)?.toISOString() ?? null
-      : null,
-    created: subscription.created
-      ? toDateTime(subscription.created)?.toISOString() ?? null
-      : null,
-    ended_at: subscription.ended_at
-      ? toDateTime(subscription.ended_at)?.toISOString() ?? null
-      : null,
-    trial_start: subscription.trial_start
-      ? toDateTime(subscription.trial_start)?.toISOString() ?? null
-      : null,
-    trial_end: subscription.trial_end
-      ? toDateTime(subscription.trial_end)?.toISOString() ?? null
-      : null,
+    cancel_at: toISOOrNull(subscription.cancel_at),
+    canceled_at: toISOOrNull(subscription.canceled_at),
+    current_period_start: toISORequired(subscription.current_period_start),
+    current_period_end: toISORequired(subscription.current_period_end),
+    created: toISORequired(subscription.created),
+    ended_at: toISOOrNull(subscription.ended_at),
+    trial_start: toISOOrNull(subscription.trial_start),
+    trial_end: toISOOrNull(subscription.trial_end),
   };
-
-  const cleanSubscriptionData = {
-  ...subscriptionData,
-  cancel_at: subscriptionData.cancel_at ?? undefined,
-  canceled_at: subscriptionData.canceled_at ?? undefined,
-  current_period_start: subscriptionData.current_period_start ?? undefined,
-  current_period_end: subscriptionData.current_period_end ?? undefined,
-  created: subscriptionData.created ?? undefined,
-  ended_at: subscriptionData.ended_at ?? undefined,
-  trial_start: subscriptionData.trial_start ?? undefined,
-  trial_end: subscriptionData.trial_end ?? undefined,
-};
-
 
   const { error: upsertError } = await supabaseAdmin
     .from("subscriptions")
-    .upsert([cleanSubscriptionData]);
+    .upsert(subscriptionData);
 
   if (upsertError) {
-    throw new Error(`Failed to upsert subscription ${subscription.id}: ${upsertError.message}`);
+    throw new Error(
+      `Failed to upsert subscription ${subscription.id}: ${upsertError.message}`
+    );
   }
 
-  console.log(`Subscription inserted/updated: ${subscription.id} for user ${uuid}`);
+  console.log(
+    `Subscription inserted/updated: ${subscription.id} for user ${uuid}`
+  );
 
   if (createAction && subscription.default_payment_method) {
     await copyBillingDetailsToCustomer(
@@ -261,7 +263,6 @@ const manageSubscriptionStatusChange = async (
     );
   }
 };
-
 
 export {
   upsertProductRecord,
