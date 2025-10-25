@@ -226,10 +226,20 @@ const manageSubscriptionStatusChange = async (
     return date.toISOString();
   };
 
+  // Map Stripe status to database schema (handle 'paused' status)
+  type DbStatus = Database['public']['Tables']['subscriptions']['Insert']['status'];
+  const mapStatus = (stripeStatus: Stripe.Subscription.Status): DbStatus => {
+    // Map 'paused' to 'trialing' or 'active' based on your business logic
+    if (stripeStatus === 'paused') {
+      return 'trialing'; // You can change this to 'active' if preferred
+    }
+    return stripeStatus as DbStatus;
+  };
+
   const subscriptionData: Database['public']['Tables']['subscriptions']['Insert'] = {
     id: subscription.id,
     user_id: uuid,
-    status: subscription.status,
+    status: mapStatus(subscription.status),
     price_id: priceId,
     cancel_at_period_end: subscription.cancel_at_period_end,
     cancel_at: toISOOrNull(subscription.cancel_at),
