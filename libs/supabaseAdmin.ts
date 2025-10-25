@@ -175,7 +175,6 @@ const manageSubscriptionStatusChange = async (
   customerId: string,
   createAction = false
 ) => {
-  // Fix: Validate inputs
   if (!subscriptionId || !customerId) {
     throw new Error("Subscription ID and customer ID are required");
   }
@@ -192,14 +191,14 @@ const manageSubscriptionStatusChange = async (
 
   const { id: uuid } = customerData;
 
-  const subscription = await stripe.subscriptions.retrieve(subscriptionId, {
+  // ✅ Stripe v17+ fix — extract `.data`
+  const response = await stripe.subscriptions.retrieve(subscriptionId, {
     expand: ["default_payment_method"],
   });
+  const subscription = response.data;
 
-  // Fix: Safely access price_id with fallback
   const priceId = subscription.items.data[0]?.price.id ?? null;
 
-  // Fix: Streamline subscriptionData with consistent null handling
   const subscriptionData = {
     id: subscription.id,
     user_id: uuid,
@@ -232,9 +231,22 @@ const manageSubscriptionStatusChange = async (
       : null,
   };
 
+  const cleanSubscriptionData = {
+  ...subscriptionData,
+  cancel_at: subscriptionData.cancel_at ?? undefined,
+  canceled_at: subscriptionData.canceled_at ?? undefined,
+  current_period_start: subscriptionData.current_period_start ?? undefined,
+  current_period_end: subscriptionData.current_period_end ?? undefined,
+  created: subscriptionData.created ?? undefined,
+  ended_at: subscriptionData.ended_at ?? undefined,
+  trial_start: subscriptionData.trial_start ?? undefined,
+  trial_end: subscriptionData.trial_end ?? undefined,
+};
+
+
   const { error: upsertError } = await supabaseAdmin
     .from("subscriptions")
-    .upsert([subscriptionData]);
+    .upsert([cleanSubscriptionData]);
 
   if (upsertError) {
     throw new Error(`Failed to upsert subscription ${subscription.id}: ${upsertError.message}`);
@@ -242,7 +254,6 @@ const manageSubscriptionStatusChange = async (
 
   console.log(`Subscription inserted/updated: ${subscription.id} for user ${uuid}`);
 
-  // Fix: Safely cast default_payment_method
   if (createAction && subscription.default_payment_method) {
     await copyBillingDetailsToCustomer(
       uuid,
@@ -250,6 +261,7 @@ const manageSubscriptionStatusChange = async (
     );
   }
 };
+
 
 export {
   upsertProductRecord,
