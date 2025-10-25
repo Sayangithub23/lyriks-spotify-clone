@@ -41,12 +41,10 @@ const useGetSongById = (id?: string) => {
           setIsLoading(false);
         }
       } else {
-        // --- FETCH FROM SUPABASE ---
-
-        // ✅ THE FIX: Convert the string ID ("7") back to a number
+        
         const numericId = parseInt(id, 10);
 
-        // Check if the conversion is valid
+        
         if (isNaN(numericId)) {
           setIsLoading(false);
           return toast.error("Invalid song ID");
